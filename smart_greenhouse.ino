@@ -5,17 +5,7 @@
 #include <DHT.h>
 #include <BH1750.h>
 #include <Wire.h>
-
-// ===== WiFi =====
-#define WIFI_SSID "TurkTelekom_Mesh_ZT6HP6"
-#define WIFI_PASSWORD "y4sGFER77AeD"
-
-// ===== MQTT =====
-#define MQTT_HOST "39e5c60ef9564e76ae073f2e83832b26.s1.eu.hivemq.cloud"
-#define MQTT_PORT 8883
-#define MQTT_USER "greenHouse_esp32"
-#define MQTT_PASS "greenHouse123"
-#define DEVICE_ID "sera_001"
+#include "secrets.h"
 
 // ===== Sensor Pinleri =====
 #define DHT_PIN 4
@@ -29,8 +19,8 @@
 
 // ===== Sabitler =====
 #define SEND_INTERVAL 30000
-#define SOIL_DRY 3200
-#define SOIL_WET 1400
+#define SOIL_DRY 1984
+#define SOIL_WET 945
 
 // ===== Nesneler =====
 DHT dht(DHT_PIN, DHT22);
@@ -55,7 +45,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   String actuator = cmd["actuator"];
   bool state = cmd["state"];
 
-  if (actuator == "pump") digitalWrite(PUMP_PIN, state ? HIGH : LOW);  // NO: LOW=calis
+  if (actuator == "pump") digitalWrite(PUMP_PIN, state ? HIGH : LOW);  // NOT: role NC kabloli cikti, LOW=calis degil HIGH=calis (fiziksel testle dogrulandi)
   if (actuator == "fan") digitalWrite(FAN_PIN, state ? HIGH : LOW);    // NC: HIGH=calis
   if (actuator == "light") analogWrite(LIGHT_PIN, state ? 255 : 0);
 }
@@ -102,7 +92,7 @@ void setup() {
 
   // Aktuator pinleri
   pinMode(PUMP_PIN, OUTPUT);
-  digitalWrite(PUMP_PIN, HIGH);
+  digitalWrite(PUMP_PIN, LOW);  // HIGH=calis oldugu icin baslangic durumu LOW (kapali) olmali
   pinMode(FAN_PIN, OUTPUT);
   digitalWrite(FAN_PIN, HIGH);
   pinMode(LIGHT_PIN, OUTPUT);
@@ -144,9 +134,10 @@ void loop() {
     if (isnan(temp)) temp = -99;
     if (isnan(hum)) hum = -99;
 
-    int soil = map(analogRead(SOIL_PIN), SOIL_DRY, SOIL_WET, 0, 100);
+    int soilRaw = analogRead(SOIL_PIN);
+    int soil = constrain(map(soilRaw, SOIL_DRY, SOIL_WET, 0, 100), 0, 100);
     float lux = bh1750Ok ? lightMeter.readLightLevel() : -1;
-    float flow = (pulseCount / 7.5);
+    float flow = pulseCount / (7.5 * (SEND_INTERVAL / 1000.0));
     pulseCount = 0;
 
     StaticJsonDocument<256> doc;
@@ -162,6 +153,8 @@ void loop() {
     mqtt.publish("sera/001/sensors/telemetry", buffer);
 
     Serial.println(buffer);
+    Serial.print("Soil RAW: ");
+    Serial.println(soilRaw);
     lastSend = millis();
   }
 }
